@@ -236,6 +236,34 @@ val revert8ElitePatches = tasks.register<Exec>("revert8ElitePatches") {
     isIgnoreExitValue = true
 }
 
+// --- stb_image.h overflow fix patch handling ---
+// The top-level CMakeLists.txt already attempts `git apply -p0` of this patch at
+// configure time, but we also apply/revert it explicitly around the native build
+// so the working tree stays clean and the fix is guaranteed for every variant
+// (debug and release). The patch lives at patches/stb_image-overflow-fix.patch and
+// is applied with -p0 from the repo root (it has no a/ b/ prefixes).
+
+val stbPatchFile = File(gitRootForPatches, "patches/stb_image-overflow-fix.patch")
+
+// Apply the stb_image fix. Idempotent: if already applied, `git apply` fails and
+// isIgnoreExitValue keeps the task green (no-op).
+val applyStbImagePatch = tasks.register<Exec>("applyStbImagePatch") {
+    onlyIf { stbPatchFile.isFile }
+    workingDir = gitRootForPatches
+    commandLine("git", "apply", "-p0", "--ignore-whitespace", stbPatchFile.absolutePath)
+    isIgnoreExitValue = true
+}
+
+// Revert the stb_image fix after the build so the tracked source stays unmodified.
+// Idempotent: if not currently applied, `git apply -R` fails and isIgnoreExitValue
+// keeps the task green (no-op).
+val revertStbImagePatch = tasks.register<Exec>("revertStbImagePatch") {
+    onlyIf { stbPatchFile.isFile }
+    workingDir = gitRootForPatches
+    commandLine("git", "apply", "-R", "-p0", "--ignore-whitespace", stbPatchFile.absolutePath)
+    isIgnoreExitValue = true
+}
+
 androidComponents {
     onVariants(selector().all()) { variant ->
         val variantName = variant.name
@@ -246,6 +274,10 @@ androidComponents {
         listOf("externalNativeBuild$capitalized", "generateJsonModel$capitalized").forEach { taskName ->
             tasks.matching { it.name == taskName }.configureEach {
                 dependsOn(patchTask)
+                // Apply the stb_image overflow fix before the native build and
+                // revert it afterwards so the tracked source stays unmodified.
+                dependsOn(applyStbImagePatch)
+                finalizedBy(revertStbImagePatch)
             }
         }
     }
