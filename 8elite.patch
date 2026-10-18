@@ -1,0 +1,69 @@
+diff --git a/src/android/app/src/main/jni/native.cpp b/src/android/app/src/main/jni/native.cpp
+index 015189987..3f93002f1 100644
+--- a/src/android/app/src/main/jni/native.cpp
++++ b/src/android/app/src/main/jni/native.cpp
+@@ -366,8 +366,7 @@ void EmulationSession::InitializeGpuDriver(const std::string& hook_lib_dir,
+ 
+     // Try to load the system driver.
+     if (!handle) {
+-        handle = adrenotools_open_libvulkan(RTLD_NOW, featureFlags, nullptr, hook_lib_dir.c_str(),
+-                                            nullptr, nullptr, file_redirect_dir_, nullptr);
++        handle = dlopen("libvulkan.so", RTLD_NOW);
+     }
+ 
+     m_vulkan_library = std::make_shared<Common::DynamicLibrary>(handle);
+diff --git a/src/video_core/vulkan_common/vulkan_device.cpp b/src/video_core/vulkan_common/vulkan_device.cpp
+index ab0423c0c..98d79b3fb 100644
+--- a/src/video_core/vulkan_common/vulkan_device.cpp
++++ b/src/video_core/vulkan_common/vulkan_device.cpp
+@@ -514,13 +514,13 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+     // Turnip keeps it: samplers only take a custom colour slot for a colour that is not one of the
+     // standard ones, and never more than maxCustomBorderColorSamplers (Mesa tu_sampler.cc takes
+     // the first free slot without a bounds check in release builds).
+-    if (is_qualcomm) {
++    if (driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY) {
+         LOG_WARNING(Render_Vulkan, "Qualcomm drivers have broken VK_EXT_custom_border_color");
+         RemoveExtensionFeature(extensions.custom_border_color, features.custom_border_color,
+                                VK_EXT_CUSTOM_BORDER_COLOR_EXTENSION_NAME);
+     }
+ 
+-    if (is_qualcomm) {
++    if (driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY) {
+         must_emulate_scaled_formats = true;
+ 
+         LOG_WARNING(Render_Vulkan, "Qualcomm drivers have broken VK_EXT_extended_dynamic_state");
+@@ -676,7 +676,7 @@ Device::Device(VkInstance instance_, vk::PhysicalDevice physical_, VkSurfaceKHR
+             has_broken_cube_compatibility = true;
+         }
+     }
+-    if (is_qualcomm) {
++    if (driver_id == VK_DRIVER_ID_QUALCOMM_PROPRIETARY) {
+         const u32 version = (properties.properties.driverVersion << 3) >> 3;
+         if (version < VK_MAKE_API_VERSION(0, 255, 615, 512)) {
+             has_broken_parallel_compiling = true;
+diff --git a/src/video_core/vulkan_common/vulkan_device.h b/src/video_core/vulkan_common/vulkan_device.h
+index dcef51ac3..8a21f6268 100644
+--- a/src/video_core/vulkan_common/vulkan_device.h
++++ b/src/video_core/vulkan_common/vulkan_device.h
+@@ -421,6 +421,10 @@ public:
+ 
+     /// Returns true if shader int64 is supported.
+     bool IsShaderInt64Supported() const {
++        const auto driver = GetDriverID();
++        if (driver == VK_DRIVER_ID_QUALCOMM_PROPRIETARY) {
++            return false;
++        }
+         return features.features.shaderInt64;
+     }
+ 
+@@ -686,6 +690,10 @@ public:
+ 
+     /// Returns true if the device supports VK_KHR_shader_atomic_int64.
+     bool IsExtShaderAtomicInt64Supported() const {
++        const auto driver = GetDriverID();
++        if (driver == VK_DRIVER_ID_QUALCOMM_PROPRIETARY) {
++            return false;
++        }
+         return extensions.shader_atomic_int64;
+     }
+ 

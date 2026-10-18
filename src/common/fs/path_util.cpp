@@ -96,7 +96,10 @@ public:
         citron_path_cache = citron_path / CACHE_DIR;
         citron_path_config = citron_path / CONFIG_DIR;
 #elif ANDROID
-        assert(!citron_path.empty());
+        // On Android the real path is supplied later via SetAppDirectory(); the
+        // default constructor calls Reinitialize() with an empty path, so we must
+        // not assert here (that would crash every Debug build before SetAppDirectory
+        // runs). An empty path is harmless and gets overwritten by the real init.
         citron_path_cache = citron_path / CACHE_DIR;
         citron_path_config = citron_path / CONFIG_DIR;
 #else

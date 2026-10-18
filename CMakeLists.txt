@@ -34,6 +34,23 @@ include(CMakeDependentOption)
 include(CTest)
 include(PGO)
 
+# Android NDK links every static archive (opus, etc.) into one shared library, so
+# all objects — including hand-written .S assembly — must be position-independent.
+# The NDK adds -fPIC to C/C++ but NOT to ASM, which makes Opus' NEON assembly fail
+# to link (R_AARCH64_ADR_PREL_PG_HI21 / R_AARCH64_ADD_ABS_LO12_NC against celt_tx_tab_*).
+# We both force global PIC and append -fPIC to ASM flags. Guard on CMAKE_SYSTEM_NAME
+# (NOT ANDROID) because ANDROID is not reliably defined in this scope.
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -fPIC")
+    # Android 15 (API 35)+ requires native libraries to be aligned to a 16 KB page
+    # size. NDK r26 still defaults to 4 KB, so explicitly raise max-page-size for
+    # every shared library we link (our .so and the adrenotools hook .so files).
+    # 16 KB alignment is a superset of 4 KB, so older devices stay compatible.
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+endif()
+
 # Disable Warnings as Errors for MSVC
 if (MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W3 /WX-")
@@ -780,15 +797,15 @@ if (CLANG_FORMAT)
     set(SRCS ${PROJECT_SOURCE_DIR}/src)
     set(CCOMMENT "Running clang format against all the .h and .cpp files in src/")
     if (WIN32)
-        add_custom_target(clang-format
+        add_custom_target(clang-format-citron
             COMMAND powershell.exe -Command "Get-ChildItem '${SRCS}/*' -Include *.cpp,*.h -Recurse | Foreach {&'${CLANG_FORMAT}' -i $_.fullname}"
             COMMENT ${CCOMMENT})
     elseif(MINGW)
-        add_custom_target(clang-format
+        add_custom_target(clang-format-citron
             COMMAND find `cygpath -u ${SRCS}` -iname *.h -o -iname *.cpp | xargs `cygpath -u ${CLANG_FORMAT}` -i
             COMMENT ${CCOMMENT})
     else()
-        add_custom_target(clang-format
+        add_custom_target(clang-format-citron
             COMMAND find ${SRCS} -iname *.h -o -iname *.cpp | xargs ${CLANG_FORMAT} -i
             COMMENT ${CCOMMENT})
     endif()

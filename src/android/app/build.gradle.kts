@@ -40,8 +40,8 @@ val autoVersion = (((System.currentTimeMillis() / 1000) - 1451606400) / 10).toIn
 @Suppress("UnstableApiUsage")
 android {
     namespace = "org.citron.citron_emu"
+    compileSdkVersion("android-37")
 
-    compileSdk = 37
     ndkVersion = "26.1.10909125"
 
     buildFeatures {
@@ -161,6 +161,12 @@ android {
             buildConfigField("Boolean", "PREMIUM", "true")
             applicationIdSuffix = ".ea"
         }
+
+        create("eightElite") {
+            dimension = "version"
+            buildConfigField("Boolean", "PREMIUM", "true")
+            applicationIdSuffix = ".elite"
+        }
     }
 
     externalNativeBuild {
@@ -169,6 +175,7 @@ android {
             path = file("../../../CMakeLists.txt")
         }
     }
+    compileSdkMinor = 0
 
     defaultConfig {
         externalNativeBuild {
@@ -194,6 +201,56 @@ android {
     }
 }
 
+// --- 8 Elite (Snapdragon 8 Elite) patch handling ---
+// Mirrors the sed patches applied in build-android.yml. The patches are applied to the
+// tracked C++ sources only while building an 8 Elite variant (or any debug build, which
+// is patched by default for local testing) and reverted afterwards, so a standard release
+// stays unmodified. The patch set lives at 8elite.patch at the repository root.
+
+fun findGitRootForPatches(start: File): File {
+    var dir: File? = start
+    while (dir != null && !File(dir, ".git").isDirectory) {
+        dir = dir.parentFile
+    }
+    return dir ?: start
+}
+
+val gitRootForPatches = findGitRootForPatches(project.projectDir)
+val eightElitePatchFile = File(gitRootForPatches, "8elite.patch")
+
+// Apply the 8 Elite patches. Idempotent: if they are already applied, `git apply`
+// fails and isIgnoreExitValue keeps the task green (no-op).
+val apply8ElitePatches = tasks.register<Exec>("apply8ElitePatches") {
+    onlyIf { eightElitePatchFile.isFile }
+    workingDir = gitRootForPatches
+    commandLine("git", "apply", eightElitePatchFile.absolutePath)
+    isIgnoreExitValue = true
+}
+
+// Revert the 8 Elite patches. Idempotent: if they are not currently applied,
+// `git apply -R` fails and isIgnoreExitValue keeps the task green (no-op).
+val revert8ElitePatches = tasks.register<Exec>("revert8ElitePatches") {
+    onlyIf { eightElitePatchFile.isFile }
+    workingDir = gitRootForPatches
+    commandLine("git", "apply", "-R", eightElitePatchFile.absolutePath)
+    isIgnoreExitValue = true
+}
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        val variantName = variant.name
+        val isElite = variantName.contains("elite", ignoreCase = true)
+        val isDebug = variantName.endsWith("Debug", ignoreCase = true)
+        val patchTask = if (isElite || isDebug) apply8ElitePatches else revert8ElitePatches
+        val capitalized = variantName.replaceFirstChar { if (it.isLowerCase()) it.uppercase() else it.toString() }
+        listOf("externalNativeBuild$capitalized", "generateJsonModel$capitalized").forEach { taskName ->
+            tasks.matching { it.name == taskName }.configureEach {
+                dependsOn(patchTask)
+            }
+        }
+    }
+}
+
 tasks.register<Delete>("ktlintReset") {
     description = "Clean ktlint generated intermediate files"
     delete(layout.buildDirectory.dir("intermediates/ktLint"))
@@ -208,7 +265,7 @@ ktlint {
 dependencies {
     testImplementation("junit:junit:4.13.2")
 
-    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.core:core-ktx:1.18.0")
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
