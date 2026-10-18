@@ -43,6 +43,11 @@ include(PGO)
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
     set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} -fPIC")
+    # Hide symbol visibility for the static archives we link into one shared library.
+    # Applied from the parent (not per-submodule) so we don't have to fork externals
+    # like opus; CMAKE_*_FLAGS propagate into add_subdirectory(externals/...) scopes.
+    set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -fvisibility=hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
     # Android 15 (API 35)+ requires native libraries to be aligned to a 16 KB page
     # size. NDK r26 still defaults to 4 KB, so explicitly raise max-page-size for
     # every shared library we link (our .so and the adrenotools hook .so files).

@@ -37,13 +37,19 @@ set(NX_TZDB_ROMFS_DIR "${CMAKE_CURRENT_BINARY_DIR}/nx_tzdb")
 
 if ((NOT CAN_BUILD_NX_TZDB OR CITRON_DOWNLOAD_TIME_ZONE_DATA) AND NOT EXISTS ${NX_TZDB_ROMFS_DIR})
     set(NX_TZDB_DOWNLOAD_URL "https://github.com/lat9nq/tzdb_to_nx/releases/download/${NX_TZDB_VERSION}/${NX_TZDB_VERSION}.zip")
-
-    message(STATUS "Downloading time zone data from ${NX_TZDB_DOWNLOAD_URL}...")
-    file(DOWNLOAD ${NX_TZDB_DOWNLOAD_URL} ${NX_TZDB_ARCHIVE}
-        STATUS NX_TZDB_DOWNLOAD_STATUS)
-    list(GET NX_TZDB_DOWNLOAD_STATUS 0 NX_TZDB_DOWNLOAD_STATUS_CODE)
-    if (NOT NX_TZDB_DOWNLOAD_STATUS_CODE EQUAL 0)
-        message(FATAL_ERROR "Time zone data download failed (status code ${NX_TZDB_DOWNLOAD_STATUS_CODE})")
+    # Allow offline builds: reuse a prebuilt archive from the source tree if present.
+    set(NX_TZDB_PREBUILT "${CMAKE_SOURCE_DIR}/externals/prebuilt/${NX_TZDB_VERSION}.zip")
+    if (EXISTS "${NX_TZDB_PREBUILT}")
+        message(STATUS "Using prebuilt time zone data from ${NX_TZDB_PREBUILT}")
+        file(COPY "${NX_TZDB_PREBUILT}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
+    else()
+        message(STATUS "Downloading time zone data from ${NX_TZDB_DOWNLOAD_URL}...")
+        file(DOWNLOAD ${NX_TZDB_DOWNLOAD_URL} ${NX_TZDB_ARCHIVE}
+            STATUS NX_TZDB_DOWNLOAD_STATUS)
+        list(GET NX_TZDB_DOWNLOAD_STATUS 0 NX_TZDB_DOWNLOAD_STATUS_CODE)
+        if (NOT NX_TZDB_DOWNLOAD_STATUS_CODE EQUAL 0)
+            message(FATAL_ERROR "Time zone data download failed (status code ${NX_TZDB_DOWNLOAD_STATUS_CODE})")
+        endif()
     endif()
 
     file(ARCHIVE_EXTRACT

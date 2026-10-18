@@ -147,27 +147,39 @@ else()
         -fno-rtti
         -pipe
 
-        -Werror=all
-        -Werror=extra
-        -Werror=missing-declarations
-        -Werror=shadow
-        -Werror=unused
-
         -Wno-attributes
         -Wno-invalid-offsetof
         -Wno-unused-parameter
         -Wno-missing-field-initializers
     )
 
+    # Keep -Werror strictness for desktop/CI builds. Relax it for Android NDK
+    # builds: NDK's clang trips -Werror on third-party headers (e.g. SimpleIni.h)
+    # and on newer clang diagnostics that the project was not written against.
+    if (NOT ANDROID)
+        add_compile_options(
+            -Werror=all
+            -Werror=extra
+            -Werror=missing-declarations
+            -Werror=shadow
+            -Werror=unused
+        )
+    endif()
+
     if (CMAKE_CXX_COMPILER_ID MATCHES Clang) # Clang or AppleClang
         add_compile_options(
             -Wno-braced-scalar-init
             -Wno-unused-private-field
             -Wno-nullability-completeness
-            -Werror=shadow-uncaptured-local
-            -Werror=implicit-fallthrough
-            -Werror=type-limits
+            -Wno-tautological-type-limit-compare
         )
+        if (NOT ANDROID)
+            add_compile_options(
+                -Werror=shadow-uncaptured-local
+                -Werror=implicit-fallthrough
+                -Werror=type-limits
+            )
+        endif()
         # apply hidden visibility to unity clang builds in the internal src subtree only.
         if(ENABLE_UNITY_BUILD AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT APPLE AND NOT ANDROID)
             add_compile_options(

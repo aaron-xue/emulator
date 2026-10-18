@@ -35,22 +35,29 @@ set(prefix "${CMAKE_BINARY_DIR}/externals/${lib_name}")
 if (NOT EXISTS "${prefix}")
     set(download_url "${package_url}${remote_path}${lib_name}${package_extension}")
     set(download_path "${CMAKE_BINARY_DIR}/externals/${lib_name}${package_extension}")
-    message(STATUS "Downloading binaries for ${lib_name} from ${download_url}...")
-    file(DOWNLOAD
-        ${download_url}
-        ${download_path}
-        SHOW_PROGRESS
-        STATUS download_status)
-    list(GET download_status 0 status_code)
-    list(GET download_status 1 status_string)
-    if (NOT status_code EQUAL 0)
-        message(FATAL_ERROR "Failed to download ${lib_name}: ${status_string} (${status_code})\nURL: ${download_url}")
-    endif()
-    # Verify the downloaded file is not empty or an error page
-    file(SIZE ${download_path} download_size)
-    if (download_size LESS 1000)
-        file(READ ${download_path} download_content LIMIT 500)
-        message(FATAL_ERROR "Downloaded file for ${lib_name} appears invalid (size: ${download_size} bytes).\nURL: ${download_url}\nContent preview: ${download_content}")
+    # Allow offline builds: reuse a prebuilt archive from the source tree if present.
+    set(prebuilt_path "${CMAKE_SOURCE_DIR}/externals/prebuilt/${lib_name}${package_extension}")
+    if (EXISTS "${prebuilt_path}")
+        message(STATUS "Using prebuilt archive for ${lib_name} from ${prebuilt_path}")
+        file(COPY "${prebuilt_path}" DESTINATION "${CMAKE_BINARY_DIR}/externals")
+    else()
+        message(STATUS "Downloading binaries for ${lib_name} from ${download_url}...")
+        file(DOWNLOAD
+            ${download_url}
+            ${download_path}
+            SHOW_PROGRESS
+            STATUS download_status)
+        list(GET download_status 0 status_code)
+        list(GET download_status 1 status_string)
+        if (NOT status_code EQUAL 0)
+            message(FATAL_ERROR "Failed to download ${lib_name}: ${status_string} (${status_code})\nURL: ${download_url}")
+        endif()
+        # Verify the downloaded file is not empty or an error page
+        file(SIZE ${download_path} download_size)
+        if (download_size LESS 1000)
+            file(READ ${download_path} download_content LIMIT 500)
+            message(FATAL_ERROR "Downloaded file for ${lib_name} appears invalid (size: ${download_size} bytes).\nURL: ${download_url}\nContent preview: ${download_content}")
+        endif()
     endif()
     execute_process(
         COMMAND ${CMAKE_COMMAND} -E tar xf ${download_path}
